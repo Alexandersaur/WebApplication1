@@ -11,8 +11,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using TheBlogProject.Services;
 using WebApplication1.Data;
 using WebApplication1.Models;
+using WebApplication1.Services;
+using WebApplication1.ViewModels;
 
 namespace WebApplication1
 {
@@ -47,6 +50,19 @@ namespace WebApplication1
                   .AddEntityFrameworkStores<ApplicationDbContext>();
             services.AddControllersWithViews();
             services.AddRazorPages();
+
+            //Registering my custom DataService class
+            services.AddScoped<DataService>();
+
+            //Registering my pre-configured instance of MailSettings class
+            services.Configure<MailSettings>(Configuration.GetSection("MailSettings"));
+            services.AddScoped<IBlogEmailSender, EmailService>();
+
+            //Registering my Image Service
+            services.AddScoped<IImageService, BasicImageService>();
+
+            //Registering my Slug Service
+            services.AddScoped<ISlugService, BasicSlugService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
