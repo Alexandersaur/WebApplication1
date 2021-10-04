@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -20,7 +21,7 @@ namespace WebApplication1.Controllers
         private readonly UserManager<BlogUser> _userManager;
 
         public BlogsController(ApplicationDbContext context,
-                               IImageService imageService, 
+                               IImageService imageService,
                                UserManager<BlogUser> userManager)
         {
             _context = context;
@@ -103,7 +104,7 @@ namespace WebApplication1.Controllers
         // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Description,Image")] Blog blog)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Description")] Blog blog, IFormFile newImage)
         {
             if (id != blog.Id)
             {
@@ -114,7 +115,24 @@ namespace WebApplication1.Controllers
             {
                 try
                 {
-                    _context.Update(blog);
+                    var newBlog = await _context.Blogs.FindAsync(blog.Id);
+                    newBlog.Updated = DateTime.Now;
+
+                    if (newBlog.Name != blog.Name)
+                    {
+                        newBlog.Name = blog.Name;
+                    }
+
+                    if(newBlog.Description != blog.Description)
+                    {
+                        newBlog.Description = blog.Description;
+                    }
+
+                    if(newImage is not null)
+                    {
+                        newBlog.ImageData = await _imageService.EncodeImageAsync(newImage);
+                    }
+
                     await _context.SaveChangesAsync();
                 }
                 catch (DbUpdateConcurrencyException)
@@ -130,6 +148,7 @@ namespace WebApplication1.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
+
             ViewData["BlogUserId"] = new SelectList(_context.Users, "Id", "Id", blog.BlogUserId);
             return View(blog);
         }
