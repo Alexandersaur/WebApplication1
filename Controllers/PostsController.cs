@@ -10,6 +10,8 @@ using Microsoft.EntityFrameworkCore;
 using WebApplication1.Data;
 using WebApplication1.Models;
 using WebApplication1.Services;
+using WebApplication1.ViewModels;
+using X.PagedList;
 
 namespace WebApplication1.Controllers
 {
@@ -19,16 +21,28 @@ namespace WebApplication1.Controllers
         private readonly ISlugService _slugService;
         private readonly IImageService _imageService;
         private readonly UserManager<BlogUser> _userManager;
+        private readonly BlogSearchService _blogSearchService;
 
         public PostsController(ApplicationDbContext context,
                                ISlugService slugService,
                                IImageService imageService,
-                               UserManager<BlogUser> userManager)
+                               UserManager<BlogUser> userManager,
+                               BlogSearchService blogSearchService)
         {
             _context = context;
             _slugService = slugService;
             _imageService = imageService;
             _userManager = userManager;
+            _blogSearchService = blogSearchService;
+        }
+
+        public async Task<IActionResult> SearchIndex(int? page, string searchTerm)
+        {
+            ViewData["SearchTerm"] = searchTerm;
+            var pageNumber = page ?? 1;
+            var pageSize = 5;
+            var posts = _blogSearchService.Search(searchTerm);
+            return View(await posts.ToPagedListAsync(pageNumber, pageSize));
         }
 
         // GET: Posts
@@ -38,25 +52,70 @@ namespace WebApplication1.Controllers
             return View(await applicationDbContext.ToListAsync());
         }
 
-        // GET: Posts/Details/5
-        public async Task<IActionResult> Details(int? id)
+        public async Task<IActionResult> BlogPostIndex (int? id, int? page)
         {
-            if (id == null)
+            if (id is null)
             {
                 return NotFound();
             }
+            var pageNumber = page ?? 1;
+            var pageSize = 5;
+            //var posts = _context.Posts.Where(p => p.BlogId == id).ToList();
+            var posts = await _context.Posts
+                                      //.Where(p => p.BlogId == id && p.ReadyStatus == Enums.ReadyStatus.ProductionReady)
+                                      .Where(p => p.BlogId == id)
+                                      .OrderByDescending(p => p.Created)
+                                      .ToPagedListAsync(pageNumber, pageSize);
+            return View(posts);
+        }
 
+        // GET: Posts/Details/5
+        //public async Task<IActionResult> Details(string slug)
+        //{
+        //    if (string.IsNullOrEmpty(slug))
+        //    {
+        //        return NotFound();
+        //    }
+
+        //    var post = await _context.Posts
+        //                             .Include(p => p.Blog)
+        //                             .Include(p => p.BlogUser)
+        //                             .Include(p => p.Tags)
+        //                             .Include(p => p.Comments)
+        //                                            .ThenInclude(c => c.BlogUser)
+        //                             .FirstOrDefaultAsync(m => m.Slug == slug);
+        //    if (post == null)
+        //    {
+        //        return NotFound();
+        //    }
+
+        //    return View(post);
+        //}
+
+        public async Task<IActionResult> Details (string slug)
+        {
+            ViewData["Title"] = "Post Details Page";
+            if (string.IsNullOrEmpty(slug)) return NotFound();
             var post = await _context.Posts
-                .Include(p => p.Blog)
-                .Include(p => p.BlogUser)
-                .Include(p => p.Tags)
-                .FirstOrDefaultAsync(m => m.Id == id);
-            if (post == null)
+                                     .Include(p => p.BlogUser)
+                                     .Include(p => p.Tags)
+                                     .Include(p => p.Comments)
+                                                    .ThenInclude(c => c.BlogUser)
+                                     .Include(p => p.Comments)
+                                                    .ThenInclude(c => c.Moderator)
+                                     .FirstOrDefaultAsync(m => m.Slug == slug);
+            if (post == null) return NotFound();
+            var dataVM = new PostDetailViewModel()
             {
-                return NotFound();
-            }
-
-            return View(post);
+                Post = post,
+                Tags = _context.Tags
+                               .Select(t => t.Text.ToLower())
+                               .Distinct().ToList()
+            };
+            ViewData["HeaderImage"] = _imageService.DecodeImage(post.ImageData, post.ContentType);
+            ViewData["MainText"] = post.Title;
+            ViewData["SubText"] = post.Abstract;
+            return View(dataVM);
         }
 
         // GET: Posts/Create
@@ -86,12 +145,33 @@ namespace WebApplication1.Controllers
 
 
                 var slug = _slugService.UrlFriendly(post.Title);
-                if (!_slugService.IsUnique(slug))
+                var validationError = false;
+
+                if (string.IsNullOrEmpty(slug))
                 {
+                    validationError = true;
+                    ModelState.AddModelError("", "The title you provided cannot be used as it results in a empty slug.");
+                }
+
+                else if (!_slugService.IsUnique(slug))
+                {
+                    validationError = true;
                     ModelState.AddModelError("Title", "The title you provided cannot be used as it results in a duplicate slug.");
+                }
+
+                else if (slug.Contains("test"))
+                {
+                    validationError = true;
+                    ModelState.AddModelError("", "Are you testing?.");
+                    ModelState.AddModelError("Title", "The title cannot contain the word test.");
+                }
+
+                if (validationError)
+                {
                     ViewData["TagValues"] = string.Join(",", tagValues);
                     return View(post);
                 }
+
                 post.Slug = slug;
 
                 _context.Add(post);
@@ -155,6 +235,22 @@ namespace WebApplication1.Controllers
                     newPost.Abstract = post.Abstract;
                     newPost.Content = post.Content;
                     newPost.ReadyStatus = post.ReadyStatus;
+
+                    var newSlug = _slugService.UrlFriendly(post.Title);
+                    if(newSlug != newPost.Slug)
+                    {
+                        if (_slugService.IsUnique(newSlug))
+                        {
+                            newPost.Title = post.Title;
+                            newPost.Slug = post.Slug;
+                        }
+                        else
+                        {
+                            ModelState.AddModelError("Title", "This title cannot be used as it results in a duplicate slug.");
+                            ViewData["TagValues"] = string.Join(",", post.Tags.Select(t => t.Text));
+                            return View(post);
+                        }
+                    }
 
                     if(newImage is not null)
                     {

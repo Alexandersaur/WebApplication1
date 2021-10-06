@@ -53,6 +53,7 @@ namespace WebApplication1
 
             //Registering my custom DataService class
             services.AddScoped<DataService>();
+            services.AddScoped<BlogSearchService>();
 
             //Registering my pre-configured instance of MailSettings class
             services.Configure<MailSettings>(Configuration.GetSection("MailSettings"));
@@ -90,8 +91,16 @@ namespace WebApplication1
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllerRoute(
+                    name: "SlugRoute",
+                    pattern: "BlogPosts/UrlFriendly/{slug}",
+                    defaults: new { controller = "Posts", action = "Details" } 
+                    );
+
+                endpoints.MapControllerRoute(
                     name: "default",
-                    pattern: "{controller=Home}/{action=Index}/{id?}");
+                    pattern: "{controller=Home}/{action=Index}/{id?}"
+                    );
+
                 endpoints.MapRazorPages();
             });
         }

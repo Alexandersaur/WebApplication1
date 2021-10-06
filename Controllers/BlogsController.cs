@@ -56,7 +56,7 @@ namespace WebApplication1.Controllers
         }
 
         // GET: Blogs/Create
-        [Authorize]
+        [Authorize(Roles = "Administrator")]
         public IActionResult Create()
         {
             return View();
@@ -123,12 +123,12 @@ namespace WebApplication1.Controllers
                         newBlog.Name = blog.Name;
                     }
 
-                    if(newBlog.Description != blog.Description)
+                    if (newBlog.Description != blog.Description)
                     {
                         newBlog.Description = blog.Description;
                     }
 
-                    if(newImage is not null)
+                    if (newImage is not null)
                     {
                         newBlog.ImageData = await _imageService.EncodeImageAsync(newImage);
                     }
